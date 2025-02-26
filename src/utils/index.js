@@ -1,9 +1,21 @@
-import fs from 'fs';
-import { Parser } from '@json2csv/plainjs';
-import XLSX from 'xlsx-js-style';
-import {format} from 'date-fns';
+import * as XLSX from "xlsx-js-style";
+import {format} from "date-fns";
 
-function decode(text) {
+// 標題樣式
+const headerStyle = {
+    font: {bold: true, color: {rgb: "FFFFFF"}},
+    fill: {fgColor: {rgb: "4F81BD"}},
+    alignment: {horizontal: "center", vertical: "center"},
+    border: {top: {style: "thin"}, bottom: {style: "thin"}, left: {style: "thin"}, right: {style: "thin"}},
+};
+
+// 單元格樣式
+const cellStyle = {
+    alignment: {horizontal: "left", vertical: "center"},
+    border: {top: {style: "thin"}, bottom: {style: "thin"}, left: {style: "thin"}, right: {style: "thin"}},
+};
+
+const decode = (text) => {
     if (!text) return "";
 
     let charArr = [];
@@ -14,111 +26,94 @@ function decode(text) {
     return new TextDecoder().decode(new Uint8Array(charArr));
 }
 
-const headerStyle = {
-    font: { bold: true, color: { rgb: "FFFFFF" } },
-    fill: { fgColor: { rgb: "4F81BD" } }, // 背景顏色
-    alignment: { horizontal: "center", vertical: "center" },
-    border: {
-        top: { style: "thin", color: { rgb: "000000" } },
-        bottom: { style: "thin", color: { rgb: "000000" } },
-        left: { style: "thin", color: { rgb: "000000" } },
-        right: { style: "thin", color: { rgb: "000000" } }
-    }
-};
-
-const cellStyle = {
-    alignment: { horizontal: "left", vertical: "center" },
-    border: {
-        top: { style: "thin", color: { rgb: "000000" } },
-        bottom: { style: "thin", color: { rgb: "000000" } },
-        left: { style: "thin", color: { rgb: "000000" } },
-        right: { style: "thin", color: { rgb: "000000" } }
-    }
-};
-
-// 讀取 JSON 檔案
-fs.readFile('../assets/message1.json', 'utf8', (err, data) => {
-    if (err) {
-        console.error('讀取 JSON 失敗:', err);
-        return;
-    }
-
+// 解析 JSON 並轉換為格式化資料
+export const parseJSON = (jsonString) => {
+    if(!jsonString) throw new Error("JSON 檔案內容為空");
+    let jsonData;
     try {
-        const jsonData = JSON.parse(data);
-
-        // 取出 messages 陣列並解碼 Unicode 字符
-        const messages = jsonData.messages.map(msg => ({
+        jsonData = JSON.parse(jsonString);
+        if (!jsonData.messages) throw new Error("無 messages 陣列");
+        const messages = jsonData.messages.map((msg) => ({
             sender_name: decode(msg.sender_name),
-            timestamp: format(new Date(msg.timestamp_ms), 'yyyy-MM-dd HH:mm:ss'), // 轉換時間格式
-            content: msg.content ? decode(msg.content) : '', // 解碼內容
-            photos: msg.photos ? msg.photos.map(photo => decode(photo.uri)).join('; ') : '',
+            timestamp: format(new Date(msg.timestamp_ms), "yyyy-MM-dd HH:mm:ss"),
+            content: decode(msg.content) || "",
         }));
+        return {
+            sender: decode(jsonData.participants[0].name),
+            messages
+        }
+    } catch (error) {
+        throw new Error("JSON 解析失敗：" + error.message);
+    }
+};
 
-        // 檢查是否有資料
-        if (messages.length === 0) {
-            throw new Error("No messages found in the data");
+// 轉換資料並下載 Excel
+export const downloadExcel = (jsonFiles) => {
+
+    if (jsonFiles.length === 0) return;
+
+    const wb = XLSX.utils.book_new();
+    console.log(jsonFiles,'jsonFiles')
+    jsonFiles.forEach(({fileName, messages, sender}) => {
+        const ws = XLSX.utils.json_to_sheet(messages, {header: ["sender_name", "timestamp", "content"]});
+        // 設定標題樣式
+        const range = XLSX.utils.decode_range(ws["!ref"]);
+        // 自適應欄寬
+        const colWidths = [{ width: 10 }, { width: 10 }, { width: 10 }]; // 初始欄寬
+        for (let row = range.s.r; row <= range.e.r; row++) {
+            for (let col = range.s.c; col <= range.e.c; col++) {
+                const cell = ws[XLSX.utils.encode_cell({ r: row, c: col })];
+                if (cell && cell.v) {
+                    const contentLength = cell.v.toString().length;
+                    if (contentLength > colWidths[col].width) {
+                        colWidths[col].width = contentLength + 5; // 增加寬度緩衝
+                    }
+                }
+            }
+        }
+        ws["!cols"] = colWidths;
+
+        // 設定內容樣式
+        // 自適應行高
+        const rowHeights = [{ hpt: 20 }]; // 標題行高度
+        for (let row = range.s.r + 1; row <= range.e.r; row++) {
+            let maxLines = 1;
+            for (let col = range.s.c; col <= range.e.c; col++) {
+                const cell = ws[XLSX.utils.encode_cell({ r: row, c: col })];
+                if (cell && cell.v) {
+                    const lines = cell.v.toString().split("\n").length; // 計算換行數
+                    if (lines > maxLines) maxLines = lines;
+                }
+            }
+            rowHeights.push({ hpt: maxLines * 20 }); // 每行約 20px 高度
+        }
+        ws["!rows"] = rowHeights;
+
+        // 設定標題樣式
+        for (let col = range.s.c; col <= range.e.c; col++) {
+            const cell = ws[XLSX.utils.encode_cell({ r: 0, c: col })];
+            if (cell) cell.s = headerStyle;
         }
 
-        // 設定 CSV 欄位
-        const opts = { fields: ['sender_name', 'timestamp', 'content', 'photos'] };
-        const parser = new Parser(opts);
-        const csv = parser.parse(messages);
-
-        // 將 CSV 存檔
-        fs.writeFile('messages.csv', csv, (err) => {
-            if (err) {
-                console.error('寫入 CSV 失敗:', err);
-            } else {
-                console.log('成功轉換 JSON 至 CSV，檔案已儲存為 messages.csv');
-                console.log(XLSX,'xlsx')
-                // 轉換 JSON 資料為 Excel
-                const wb = XLSX.utils.book_new(); // 創建新的工作簿
-
-                const ws = XLSX.utils.json_to_sheet(messages, { header: ['sender_name', 'timestamp', 'content', 'photos'] }); // 轉換 JSON 資料為工作表
-
-                // 設定標題行樣式
-                const range = XLSX.utils.decode_range(ws['!ref']);  // 獲取工作表範圍
-                for (let col = range.s.c; col <= range.e.c; col++) {
-                    const cell = ws[XLSX.utils.encode_cell({ r: 0, c: col })]; // 獲取標題行
-                    if (cell) {
-                        cell.s = headerStyle; // 應用樣式
-                    }
-                }
-
-                // 設定資料行樣式
-                for (let row = range.s.r + 1; row <= range.e.r; row++) {
-                    for (let col = range.s.c; col <= range.e.c; col++) {
-                        const cell = ws[XLSX.utils.encode_cell({ r: row, c: col })]; // 獲取每個資料行的單元格
-                        if (cell) {
-                            cell.s = cellStyle; // 應用樣式
-                        }
-                    }
-                }
-
-                // 設定列寬
-                ws['!cols'] = [
-                    { width: 20 },  // sender_name
-                    { width: 30 },  // timestamp
-                    { width: 100 },  // content
-                    { width: 30 },  // photos
-                ];
-
-                // 設定行高
-                ws['!rows'] = [
-                    { hpt: 20 },  // 設定標題行高度
-                    ...new Array(messages.length).fill({ hpt: 40 }) // 設定資料行高度
-                ];
-
-                // 將工作表添加到工作簿
-                XLSX.utils.book_append_sheet(wb, ws, 'Messages');
-
-                // 將 Excel 檔案寫入磁碟
-                XLSX.writeFile(wb, 'messages_with_style.xlsx');
-                console.log('成功將 CSV 轉換為帶有樣式的 Excel，檔案已儲存為 messages_with_style.xlsx');
+        // 設定內容樣式
+        for (let row = range.s.r + 1; row <= range.e.r; row++) {
+            for (let col = range.s.c; col <= range.e.c; col++) {
+                const cell = ws[XLSX.utils.encode_cell({ r: row, c: col })];
+                if (cell) cell.s = cellStyle;
             }
-        });
+        }
 
-    } catch (err) {
-        console.error('解析 JSON 失敗:', err);
-    }
-});
+        XLSX.utils.book_append_sheet(wb, ws, sender);
+    })
+
+
+    const excelBuffer = XLSX.write(wb, {bookType: "xlsx", type: "array"});
+    const blob = new Blob([excelBuffer], {type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "instagram_messages.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
