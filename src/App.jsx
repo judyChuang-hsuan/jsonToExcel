@@ -1,4 +1,4 @@
-import React, {useState} from "react";
+import React, {use, useState} from "react";
 import {Upload, Button, message, Spin} from "antd";
 import {InboxOutlined} from "@ant-design/icons";
 import {parseJSON, downloadExcel} from "./utils"; // 引入 utils.js
@@ -9,8 +9,9 @@ const {Dragger} = Upload;
 const ExcelConverter = () => {
     const [jsonFiles, setJsonFiles] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [fileList, setFileList] = useState([]);
 
-    const handleUpload = (file) => {
+    const handleUpload = () => {
         return false
     }
 
@@ -21,6 +22,8 @@ const ExcelConverter = () => {
             message.error("未偵測到 JSON 檔案！");
             return;
         }
+
+        setFileList(info.fileList);
 
         const newJsonFiles = [];
 
@@ -66,10 +69,21 @@ const ExcelConverter = () => {
         });
     };
 
+    const onRemoveFiles = () => {
+        setJsonFiles([])
+        setFileList([])
+    }
+
 
     return (
         <div className={'upload-section'} style={{padding: "20px"}}>
-            <Dragger beforeUpload={handleUpload} showUploadList accept=".json" multiple directory onChange={onChange}>
+            <Dragger fileList={fileList}
+                     beforeUpload={handleUpload}
+                     showUploadList
+                     accept=".json"
+                     multiple
+                     directory
+                     onChange={onChange}>
                 <p className="ant-upload-drag-icon">
                     <InboxOutlined/>
                 </p>
@@ -80,6 +94,9 @@ const ExcelConverter = () => {
             <Button type="primary" onClick={() => downloadExcel(jsonFiles)} style={{marginTop: 20}}
                     disabled={jsonFiles.length === 0 && loading}>
                 下載 Excel
+            </Button>
+            <Button type="default" onClick={onRemoveFiles} style={{marginTop: 20, marginLeft: 10}}>
+                清空上傳資料
             </Button>
             <Spin spinning={loading} fullscreen></Spin>
         </div>
