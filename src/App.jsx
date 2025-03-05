@@ -1,5 +1,5 @@
 import React, {useState} from "react";
-import {Upload, Button, message} from "antd";
+import {Upload, Button, message, Spin} from "antd";
 import {InboxOutlined} from "@ant-design/icons";
 import {parseJSON, downloadExcel} from "./utils"; // 引入 utils.js
 import "./App.css"
@@ -8,12 +8,14 @@ const {Dragger} = Upload;
 
 const ExcelConverter = () => {
     const [jsonFiles, setJsonFiles] = useState([]);
+    const [loading, setLoading] = useState(false);
 
     const handleUpload = (file) => {
         return false
     }
 
     const onChange = (info) => {
+        setLoading(true)
 
         if (!info.fileList.length) {
             message.error("未偵測到 JSON 檔案！");
@@ -47,14 +49,17 @@ const ExcelConverter = () => {
                         console.log("所有 JSON 解析完成，更新 jsonFiles", newJsonFiles);
                         setJsonFiles((prev) => [...prev, ...newJsonFiles]);
                         message.success("所有檔案解析成功！");
+                        setLoading(false)
                     }
                 } catch (error) {
                     message.error(`${file.name} 解析失敗：${error.message}`);
+                    setLoading(false)
                 }
             };
 
             reader.onerror = () => {
                 message.error(`讀取 ${file.name} 失敗`);
+                setLoading(false)
             };
 
             reader.readAsText(file);
@@ -73,9 +78,10 @@ const ExcelConverter = () => {
             </Dragger>
 
             <Button type="primary" onClick={() => downloadExcel(jsonFiles)} style={{marginTop: 20}}
-                    disabled={jsonFiles.length === 0}>
+                    disabled={jsonFiles.length === 0 && loading}>
                 下載 Excel
             </Button>
+            <Spin spinning={loading} fullscreen></Spin>
         </div>
     );
 };
