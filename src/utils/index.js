@@ -74,7 +74,6 @@ export const parseJSON = (jsonString) => {
 
 // 轉換資料並下載 Excel
 export const downloadExcel = (jsonFiles) => {
-    console.log('download')
 
     if (jsonFiles.length === 0) return;
 

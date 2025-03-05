@@ -25,7 +25,7 @@ const ExcelConverter = () => {
         const newJsonFiles = [];
 
         info.fileList.forEach((fileWrapper, index) => {
-            const file = fileWrapper.originFileObj || fileWrapper; // ✅ 確保是 File 類型
+            const file = fileWrapper.originFileObj || fileWrapper; // 確保是 File 類型
 
             if (!(file instanceof Blob)) {
                 console.error("檔案格式錯誤，無法讀取", file);
@@ -47,7 +47,7 @@ const ExcelConverter = () => {
 
                     if (newJsonFiles.length === info.fileList.length) {
                         console.log("所有 JSON 解析完成，更新 jsonFiles", newJsonFiles);
-                        setJsonFiles((prev) => [...prev, ...newJsonFiles]);
+                        setJsonFiles(newJsonFiles);
                         message.success("所有檔案解析成功！");
                         setLoading(false)
                     }
